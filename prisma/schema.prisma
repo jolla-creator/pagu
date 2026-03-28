@@ -1,0 +1,192 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Restaurant {
+  id              String   @id @default(cuid())
+  name            String
+  address         String?
+  phone           String?
+  email           String?
+  stripeAccountId String?
+  passwordHash    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tables         Table[]
+  menuItems      MenuItem[]
+  menuCategories MenuCategory[]
+  packages       MenuPackage[]
+  orders         Order[]
+  users          User[]
+  subscriptions  Subscription[]
+  onboardingCompleted Boolean @default(false)
+  stripeEnabled Boolean @default(false)
+  stripeKey String?
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("STAFF") // OWNER or STAFF
+  restaurantId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([restaurantId])
+  @@index([email])
+}
+
+model Table {
+  id           String   @id @default(cuid())
+  number       Int
+  restaurantId String
+  qrCode       String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  orders     Order[]
+}
+
+model MenuCategory {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  sortOrder    Int      @default(0)
+  restaurantId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  items      MenuItem[]
+}
+
+model MenuItem {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  price        Int
+  imageUrl     String?
+  videoUrl     String?
+  allergens    String   @default("[]")
+  available    Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  categoryId   String
+  restaurantId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category   MenuCategory @relation(fields: [categoryId], references: [id])
+  restaurant Restaurant   @relation(fields: [restaurantId], references: [id])
+  orderItems OrderItem[]
+
+  packageItems PackageItem[]
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  tableId         String
+  restaurantId    String
+  status          String   @default("PENDING")
+  total           Int      @default(0)
+  stripePaymentId String?
+  customerName    String?
+  customerPhone   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  table        Table       @relation(fields: [tableId], references: [id])
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id])
+  items        OrderItem[]
+  review       Review?
+
+  @@index([restaurantId])
+  @@index([tableId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  menuItemId   String
+  restaurantId String
+  quantity     Int      @default(1)
+  price        Int
+  notes        String?
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([restaurantId])
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  orderId      String   @unique
+  restaurantId String
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+}
+
+model MenuPackage {
+  id           String   @id @default(cuid())
+  name         String
+  description  String?
+  price        Int
+  imageUrl     String?
+  available    Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  restaurantId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant   @relation(fields: [restaurantId], references: [id])
+  items      PackageItem[]
+}
+
+model PackageItem {
+  id           String @id @default(cuid())
+  packageId    String
+  menuItemId   String
+  restaurantId String
+  quantity     Int    @default(1)
+
+  package  MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  menuItem MenuItem    @relation(fields: [menuItemId], references: [id])
+
+  @@index([restaurantId])
+}
+
+// Subscription related types and model
+model Subscription {
+  id                   String   @id @default(cuid())
+  restaurantId         String
+  stripeSubscriptionId String?
+  stripeCustomerId     String?
+  status               String   @default("TRIALING") // ACTIVE, TRIALING, PAST_DUE, CANCELLED
+  plan                 String   @default("BASIC") // BASIC, PRO
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  trialEnd             DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+}
