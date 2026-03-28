@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [restaurantName, setRestaurantName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -18,16 +20,16 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login-v2', {
+      const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, name, restaurantName }),
       })
 
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || 'Errore di autenticazione')
+        setError(data.error || 'Errore di registrazione')
         return
       }
 
@@ -45,7 +47,7 @@ export default function LoginPage() {
       <div className="w-full max-w-xs">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-neutral-900 tracking-tight mb-1">Pagù</h1>
-          <p className="text-neutral-400 text-sm">Dashboard Ristorante</p>
+          <p className="text-neutral-400 text-sm">Crea il tuo account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -63,7 +65,23 @@ export default function LoginPage() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Inserisci la password"
+            placeholder="Minimo 6 caratteri"
+          />
+
+          <Input
+            label="Nome"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Il tuo nome"
+          />
+
+          <Input
+            label="Nome Ristorante"
+            type="text"
+            value={restaurantName}
+            onChange={(e) => setRestaurantName(e.target.value)}
+            placeholder="Nome del tuo ristorante"
           />
 
           {error && (
@@ -73,19 +91,15 @@ export default function LoginPage() {
           )}
 
           <Button type="submit" loading={loading} className="w-full">
-            Accedi
+            Registrati
           </Button>
         </form>
 
         <p className="text-sm text-neutral-500 text-center mt-6">
-          Non hai un account?{' '}
-          <a href="/register" className="text-brand-600 hover:underline">
-            Registrati
+          Hai già un account?{' '}
+          <a href="/login" className="text-brand-600 hover:underline">
+            Accedi
           </a>
-        </p>
-
-        <p className="text-xs text-neutral-400 text-center mt-4">
-          Test: owner@example.com / password123
         </p>
       </div>
     </div>
