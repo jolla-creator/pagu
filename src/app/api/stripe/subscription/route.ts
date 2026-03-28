@@ -1,36 +1,34 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { stripe } from '@/lib/stripe'
-// Price IDs are read directly from environment variables in the checkout flow
+import { verifyJwt } from '@/lib/auth'
 
-// Simple protected route placeholder: manage subscriptions in DB with 14-day trial
-// POST: Create subscription with 14-day trial for the authenticated restaurant
-// GET: Get current subscription status for restaurant
-// DELETE: Cancel subscription
-
-type Req = { restaurantId?: string; plan?: 'BASIC' | 'PRO' }
+function getAuth(request: Request) {
+  const cookieHeader = request.headers.get('cookie') || ''
+  const token = cookieHeader.split('pagu_session=')[1]?.split(';')[0]
+  if (!token) return null
+  return verifyJwt(token)
+}
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    // In a real app, restaurantId would come from an authenticated session
-    const restaurantId = body.restaurantId
-    const plan: 'BASIC' | 'PRO' = (body.plan ?? 'BASIC') as any
-
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'Missing restaurantId' }, { status: 400 })
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     }
 
-    // Ensure valid plan
+    const body = await request.json()
+    const plan: 'BASIC' | 'PRO' = (body.plan ?? 'BASIC') as 'BASIC' | 'PRO'
+
     if (plan === 'PRO' && !process.env.STRIPE_SUBSCRIPTION_PRO_PRICE_ID) {
-      return NextResponse.json({ error: 'PRO plan not configured' }, { status: 400 })
+      return NextResponse.json({ error: 'Piano PRO non configurato' }, { status: 400 })
     }
 
     const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
 
     const sub = await prisma.subscription.create({
       data: {
-        restaurantId,
+        restaurantId: auth.restaurantId,
         status: 'TRIALING',
         plan,
         trialEnd,
@@ -39,25 +37,25 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ id: sub.id, trialEnd: sub.trialEnd, status: sub.status, plan: sub.plan })
   } catch (error: any) {
+    console.error('Subscription POST error:', error)
     return NextResponse.json({ error: error?.message ?? 'Errore' }, { status: 500 })
   }
 }
 
 export async function GET(request: Request) {
   try {
-    // restaurantId from query for compatibility; in a real app use auth
-    const url = new URL(request.url)
-    const restaurantId = url.searchParams.get('restaurantId') || ''
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'Missing restaurantId' }, { status: 400 })
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     }
 
     const sub = await prisma.subscription.findFirst({
-      where: { restaurantId },
+      where: { restaurantId: auth.restaurantId },
       orderBy: { createdAt: 'desc' },
     })
 
     if (!sub) return NextResponse.json({})
+
     return NextResponse.json({
       id: sub.id,
       restaurantId: sub.restaurantId,
@@ -70,41 +68,43 @@ export async function GET(request: Request) {
       stripeCustomerId: sub.stripeCustomerId,
     })
   } catch (error: any) {
+    console.error('Subscription GET error:', error)
     return NextResponse.json({ error: error?.message ?? 'Errore' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: Request) {
   try {
-    const url = new URL(request.url)
-    const restaurantId = url.searchParams.get('restaurantId') || ''
-    if (!restaurantId) {
-      return NextResponse.json({ error: 'Missing restaurantId' }, { status: 400 })
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     }
 
-    const sub = await prisma.subscription.findFirst({ where: { restaurantId }, orderBy: { createdAt: 'desc' } })
+    const sub = await prisma.subscription.findFirst({
+      where: { restaurantId: auth.restaurantId },
+      orderBy: { createdAt: 'desc' }
+    })
+
     if (!sub) {
-      return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Abbonamento non trovato' }, { status: 404 })
     }
 
-    // Attempt to cancel on Stripe if we have a connected subscription
     if (sub.stripeSubscriptionId) {
       try {
         await stripe.subscriptions.update(sub.stripeSubscriptionId, { cancel_at_period_end: true })
-      } catch {
-        // Ignore Stripe errors for now; keep local state independent
+      } catch (e) {
+        console.error('Stripe cancel error:', e)
       }
     }
 
     await prisma.subscription.update({
       where: { id: sub.id },
-      data: {
-        status: 'CANCELLED',
-      },
+      data: { status: 'CANCELLED' },
     })
 
     return NextResponse.json({ ok: true })
   } catch (error: any) {
+    console.error('Subscription DELETE error:', error)
     return NextResponse.json({ error: error?.message ?? 'Errore' }, { status: 500 })
   }
 }

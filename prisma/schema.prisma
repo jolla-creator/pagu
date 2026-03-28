@@ -125,6 +125,8 @@ model OrderItem {
   quantity     Int      @default(1)
   price        Int
   notes        String?
+  isPaid       Boolean  @default(false)
+  paidAt       DateTime?
 
   order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem MenuItem @relation(fields: [menuItemId], references: [id])

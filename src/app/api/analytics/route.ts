@@ -1,13 +1,28 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyJwt } from '@/lib/auth'
 
-export async function GET() {
+function getAuth(request: Request) {
+  const cookieHeader = request.headers.get('cookie') || ''
+  const token = cookieHeader.split('pagu_session=')[1]?.split(';')[0]
+  if (!token) return null
+  return verifyJwt(token)
+}
+
+export async function GET(request: Request) {
   try {
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+    }
+
+    const restaurantId = auth.restaurantId
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
     const todayOrders = await prisma.order.findMany({
-      where: { 
+      where: {
+        restaurantId,
         createdAt: { gte: today },
         status: 'PAID',
       },
@@ -18,7 +33,10 @@ export async function GET() {
 
     const activeTables = await prisma.order.groupBy({
       by: ['tableId'],
-      where: { status: { in: ['PENDING', 'PREPARING', 'READY'] } },
+      where: {
+        restaurantId,
+        status: { in: ['PENDING', 'PREPARING', 'READY'] },
+      },
     })
     const activeTableCount = activeTables.length
 
@@ -46,7 +64,8 @@ export async function GET() {
       nextDate.setDate(nextDate.getDate() + 1)
 
       const dayOrders = await prisma.order.findMany({
-        where: { 
+        where: {
+          restaurantId,
           createdAt: { gte: date, lt: nextDate },
           status: 'PAID',
         },
@@ -68,6 +87,7 @@ export async function GET() {
       ordersByDay,
     })
   } catch (error) {
+    console.error('Analytics error:', error)
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
 }

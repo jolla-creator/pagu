@@ -1,10 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { emitOrderEvent } from '@/lib/events'
+import { verifyJwt } from '@/lib/auth'
 
-export async function GET() {
+function getAuth(request: Request) {
+  const cookieHeader = request.headers.get('cookie') || ''
+  const token = cookieHeader.split('pagu_session=')[1]?.split(';')[0]
+  if (!token) return null
+  return verifyJwt(token)
+}
+
+export async function GET(request: Request) {
   try {
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+    }
+
     const orders = await prisma.order.findMany({
+      where: { restaurantId: auth.restaurantId },
       orderBy: { createdAt: 'desc' },
       include: {
         table: true,
@@ -17,6 +31,7 @@ export async function GET() {
 
     return NextResponse.json({ orders })
   } catch (error) {
+    console.error('Orders GET error:', error)
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
 }
@@ -88,6 +103,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ order }, { status: 201 })
   } catch (error) {
+    console.error('Order POST error:', error)
     return NextResponse.json({ error: 'Errore creazione ordine' }, { status: 500 })
   }
 }

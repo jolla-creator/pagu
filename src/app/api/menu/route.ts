@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyJwt } from '@/lib/auth'
 
-export async function GET() {
+function getAuth(request: Request) {
+  const cookieHeader = request.headers.get('cookie') || ''
+  const token = cookieHeader.split('pagu_session=')[1]?.split(';')[0]
+  if (!token) return null
+  return verifyJwt(token)
+}
+
+export async function GET(request: Request) {
   try {
-    const restaurant = await prisma.restaurant.findFirst()
-    if (!restaurant) {
-      return NextResponse.json({ error: 'Ristorante non trovato' }, { status: 404 })
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
     }
 
     const categories = await prisma.menuCategory.findMany({
-      where: { restaurantId: restaurant.id },
+      where: { restaurantId: auth.restaurantId },
       orderBy: { sortOrder: 'asc' },
       include: {
         items: {
@@ -28,19 +36,25 @@ export async function GET() {
 
     return NextResponse.json({
       categories: parsed,
-      restaurant: { id: restaurant.id, name: restaurant.name },
+      restaurant: { id: auth.restaurantId, name: 'Ristorante' },
     })
   } catch (error) {
+    console.error('Menu GET error:', error)
     return NextResponse.json({ error: 'Errore interno' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { name, description, price, categoryId, restaurantId, allergens, imageUrl } = body
+    const auth = getAuth(request)
+    if (!auth?.restaurantId) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+    }
 
-    if (!name || !price || !categoryId || !restaurantId) {
+    const body = await request.json()
+    const { name, description, price, categoryId, allergens, imageUrl } = body
+
+    if (!name || !price || !categoryId) {
       return NextResponse.json({ error: 'Dati mancanti' }, { status: 400 })
     }
 
@@ -50,7 +64,7 @@ export async function POST(request: Request) {
         description: description || null,
         price: Math.round(price * 100),
         categoryId,
-        restaurantId,
+        restaurantId: auth.restaurantId,
         imageUrl: imageUrl || null,
         allergens: JSON.stringify(allergens ?? []),
       },
@@ -58,6 +72,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ...item, allergens: JSON.parse(item.allergens) }, { status: 201 })
   } catch (error) {
+    console.error('Menu POST error:', error)
     return NextResponse.json({ error: 'Errore creazione piatto' }, { status: 500 })
   }
 }
