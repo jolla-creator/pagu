@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,10 +18,10 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/login-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       })
 
       const data = await res.json()
@@ -49,12 +50,20 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email@esempio.it"
+            autoFocus
+          />
+
+          <Input
             label="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Inserisci la password"
-            autoFocus
           />
 
           {error && (
@@ -67,6 +76,10 @@ export default function LoginPage() {
             Accedi
           </Button>
         </form>
+
+        <p className="text-xs text-neutral-400 text-center mt-6">
+          Test: owner@example.com / password123
+        </p>
       </div>
     </div>
   )
